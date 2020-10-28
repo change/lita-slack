@@ -3,10 +3,9 @@ module Lita
     class Slack < Adapter
       # @api private
       class MessageHandler
-        def initialize(robot, robot_id, config, data)
+        def initialize(robot, robot_id, data)
           @robot = robot
           @robot_id = robot_id
-          @config = config
           @data = data
           @type = data["type"]
         end
@@ -41,7 +40,9 @@ module Lita
 
         def body
           normalized_message = if data["text"]
-            data["text"].sub(/^\s*<@#{robot_id}>/, "@#{robot.mention_name}")
+            # data["text"].sub(/^\s*<@#{robot_id}>/, "@#{robot.mention_name}")
+            # data["text"].sub(/^/[[:space:]]/*<@#{robot_id}>/, "@#{robot.mention_name}")
+            data["text"].to_s.gsub(/[[:space:]]/,' ').sub(/^\s*<@#{robot_id}>/, "@#{robot.mention_name}")
           end
 
          normalized_message = remove_formatting(normalized_message) unless normalized_message.nil?
@@ -57,51 +58,17 @@ module Lita
           # https://api.slack.com/docs/formatting
           message = message.gsub(/
               <                    # opening angle bracket
-              (?:                  # Start type & subtype
-                  (?<type>[@#!])   # link type
-                  (?<subtype>[^^>]+# start optional subtype
-                    (?=\^)         # subtype is only present with separator
-                  )?               # end subtype
-                  (?:              # start optional subtype argument 1
-                    \^             # subtype argument separator
-                    (?<arg1>[^^>]+ # subtype argument 1 capture
-                      (?=\^)       # subtype argument is only present with separator
-                    )              # end subtype argument capture
-                  )?               # end subtype argument
-                  (?:              # start optional subtype argument 2
-                    \^             # subtype argument separator
-                    (?<arg2>[^^>]+ # subtype argument 2 capture
-                      (?=\^)       # subtype argument is only present with separator
-                    )              # end subtype argument capture
-                  )?               # end subtype argument
-                  \^?              # subtype & link separator
-              )?                   # end of type & subtype
+              (?<type>[@#!])?      # link type
               (?<link>[^>|]+)      # link
               (?:\|                # start of |label (optional)
                   (?<label>[^>]+)  # label
               )?                   # end of label
               >                    # closing angle bracket
               /ix) do
-
-            type = Regexp.last_match[:type]
-            subtype = Regexp.last_match[:subtype]
-            arguments = [Regexp.last_match[:arg1], Regexp.last_match[:arg2]].compact
             link  = Regexp.last_match[:link]
             label = Regexp.last_match[:label]
 
-            # It is hard to generalize the test for an argument vs. an optional link.
-            # For now, assume links have a fixed set of protocols
-            if subtype && link !~ /^(https?|ftp|gopher|skype|mailto):/
-              arguments << link
-              link = nil
-            end
-
-            # Without a subtype, the first aguement could be the link
-            unless subtype || link
-              link = arguments.first
-            end
-
-            case type
+            case Regexp.last_match[:type]
               when '@'
                 if label
                   label
@@ -127,18 +94,7 @@ module Lita
                 end
 
               when '!'
-                if subtype.nil?
-                  "@#{link}" if ['channel', 'group', 'everyone'].include? link
-                else
-                  # In the future we may want to actually process <!date…>
-                  # commands, to allow us to interpret them for adapters. But
-                  # for now falling back to the label is sufficient.
-                  if link
-                    "#{label} (#{link})"
-                  else
-                    label
-                  end
-                end
+                "@#{link}" if ['channel', 'group', 'everyone'].include? link
               else
                 link = link.gsub /^mailto:/, ''
                 if label && !(link.include? label)
@@ -242,7 +198,7 @@ module Lita
 
         # Types of messages Lita should dispatch to handlers.
         def supported_message_subtypes
-          %w(me_message) + (@config.handle_bot_messages ? %w(bot_message) : [])
+          %w(me_message)
         end
 
         def supported_subtype?
