@@ -41,7 +41,7 @@ module Lita
 
         def body
           normalized_message = if data["text"]
-            data["text"].sub(/^\s*<@#{robot_id}>/, "@#{robot.mention_name}")
+            data["text"].sub(/^\s*<@#{robot_id}>/, "@#{robot.mention_name}") #original
           end
 
          normalized_message = remove_formatting(normalized_message) unless normalized_message.nil?
